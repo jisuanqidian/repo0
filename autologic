@@ -1,0 +1,276 @@
+#!/bin/python3
+
+import sys
+import re
+import os
+from enum import Enum,auto,unique
+
+cmd = sys.argv[1:]
+des_file = ''
+signal_source_ind = 0
+top_file = ''
+no_comment = 0
+fold = 0
+
+@unique
+class define(Enum) :
+    HELP = auto()
+    NONE = auto()
+    INPUT = auto()
+    OUTPUT = auto()
+    RTL = auto()
+    NOCOMMENT = auto()
+    FOLD = auto()
+
+Opts = define
+Opt  = Opts.NONE
+
+if __name__ == '__main__' :
+    if cmd == [] :
+        print(' *** try -h or --help for more information')
+        quit()
+    elif '-h' in cmd or '--help' in cmd :
+        print(''' *** automatic logic signals declaration in testbench.sv
+         \r *** Usage: 
+         \r      add two lines consisting "/*autologic*/" in your testbench(anything in between these two lines will be cleared and rewritten)
+         \r
+             python3(optional if file is under $PATH) autologic [-i] directory/testbench.sv [OPTS]
+             \r
+             \r *** OPTS: more options to be added
+             \r      -o/-O        , -o dir/your_des_tb.sv  designate the destination output file, if skipped, destination will be the same as original file(the
+             \r                                            input file gonna be changed)
+             \r      -i/-I        , -i dir/your_ori_tb.sv  designate the input testbench file, -i/-I could be ommited if file directly follows autologic in command
+             \r      -rtl/-r/-dut , -rtl dir/*_top.v       input/output/inout port signals will be extracted from dut top module file, if skipped, port signals
+             \r                                            for logic declaration will be extracted from u_***_top (/*autoinst*/)
+             \r      --no-comment/-NC/-nc                  add logic without any comments followed by "//"
+             \r      -f           ,                        add fold ('/*{{{*/' and '/*}}}*/')
+             \r      -h/--help                             help information
+                 ''')
+        quit()
+    else :
+        for index,item in enumerate(cmd) :
+            if Opt == Opts.NONE :
+                if item == '-o' or item == '-O' :
+                    Opt = Opts.OUTPUT
+                elif item == '-i' or item == '-I' :
+                    Opt = Opts.INPUT
+                elif item == '-rtl' or item == '-r' or item == '-dut' :
+                    Opt = Opts.RTL
+                elif item == '--no-comment' or item == '-NC' or item == '-nc' :
+                    Opt = Opts.NOCOMMENT
+                    no_comment = 1
+                    Opt = Opts.NONE
+                elif item == '-f' :
+                    Opt = Opts.FOLD
+                    fold = 1
+                    Opt = Opts.NONE
+            else :
+                if Opt == Opts.OUTPUT :
+                    des_file = item
+                    Opt = Opts.NONE
+                elif Opt == Opts.INPUT :
+                    tbfile = item
+                    Opt = Opts.NONE
+                elif Opt == Opts.RTL :
+                    signal_source_ind = 1
+                    top_file = item
+                    if os.path.isfile(top_file) == 0 :
+                        print('Input rtl top file doesn\'t exist, quit')
+                        quit()
+                    else :
+                        if 'top.v' not in top_file :
+                            yn = input('Input rtl top file name is not "***_top.v", please confirm if what followed by -rtl is correct: (y/n)')
+                            if 'y' in yn :
+                                print('continue')
+                            elif 'n' in yn :
+                                print('quit autologic')
+                                quit()
+                            else :
+                                print('please input y / n / yes / no\nquit autologic')
+                                quit()
+                    Opt = Opts.NONE
+                else :
+                    Opt = Opts.NONE
+        if '-i' not in cmd and '-I' not in cmd :
+            tbfile = cmd[0]
+        if os.path.isfile(tbfile) == 0 :
+            print('Input file doesn\'t exist, must followed by autologic or -i/-I, try -h or --help for usage instruction')
+            quit()
+        else :
+            if 'testbench.sv' not in tbfile :
+                yn = input('Input tb name is not "testbench.sv", please confirm if what followed by autologic/-i is correct: (y/n)')
+                if 'y' in yn :
+                    print('continue')
+                elif 'n' in yn :
+                    print('quit autologic')
+                    quit()
+                else :
+                    print('please input y / n / yes / no\nquit autologic')
+                    quit()
+        if des_file == '' :
+            des_file = tbfile
+
+lines = []
+signals = {}
+
+def read_tb() :
+    'save all codes in testbench.sv to list and return'
+    with open(tbfile,mode='r') as file :
+        line = [i.rstrip() for i in file.readlines()]
+    return line
+
+def rm_logic(line) :
+    'remove all lines in between /*autologic*/'
+    index = []
+    cnt = 0
+    for i,item in enumerate(line) :
+        if r'/*autologic*/' in item :
+            index.append(i)
+            cnt += 1
+            if cnt == 2 :
+                break
+    if cnt == 0 :
+        print(r'Find no line with /*autologic*/, try -h or --help for more information')
+        quit()
+    elif cnt == 1 :
+        print(r'Find only one line with /*autologic*/, try -h or --help for more information')
+        quit()
+    elif index[1] > index[0] + 1 :
+        del line[index[0]+1 : index[1]]
+    return line
+
+def get_width(string) :
+    'return signal width'
+    if re.search(r'\[(.+):\s*0\s*\]',string) == None :
+        return 0
+    else :
+        match = re.search(r'\[(.+):\s*0\s*\]',string)
+        return eval(match.group(1)) + 1
+
+def add_signal(signal,port,group_width,group_comment) :
+    'add one signal to dist, including port name, width and comment from source file'
+    if group_width == None :
+        width = 1
+    else :
+        width = get_width(group_width)
+    if group_comment == None :
+        comment = ''
+    else :
+        if no_comment == 0 :
+            comment = ' ' + group_comment.rstrip()
+        else :
+            comment = ''
+    if port not in signal :
+        signal[port] = []
+    signal[port].append(width)
+    signal[port].append(comment)
+    return signal
+
+def get_signals(line) :
+    'return all port signals with dist, return example : {"signal":[width, comment],commentidx:"comment"}'
+    index = 0
+    signal = {}
+    comment_idx = 0
+    if signal_source_ind == 0 :
+        for i in line :
+            if re.search(r'u_\w+_top',i) != None or r'/*top_inst*/' in i :
+                index = 1
+            if re.search(r'\)\s*;',i) != None and index == 1 :
+                return signal
+            if index == 1 and re.search(r'^\s*\.[^\s]+\s+\(\s*(\w+)(\[.+\])*\s*\)',i) != None :
+                match = re.search(r'^\s*\.[^\s]+\s+\(\s*(\w+)(\[.+\])*\s*\)[^\/]*(\/\/.*)?',i)
+                signal = add_signal(signal,match.group(1),match.group(2),match.group(3))
+            if index == 1 and re.search(r'^\s*(\/\/.*)',i) != None and no_comment == 0 :
+                match = re.search(r'^\s*(\/\/.*)',i)
+                signal['comment'+str(comment_idx)] = match.group(1)
+                comment_idx += 1
+    else :
+        with open(top_file,mode='r') as file :
+            top_lines = [line.strip() for line in file.readlines()]
+        for i in top_lines :
+            if re.search(r'^module\s+.*top',i) != None :
+                index = 1
+            if re.search(r'\)\s*;',i) != None and index == 1 :
+                return signal
+            if index == 1 :
+                if re.search(r'^\s*(\/\/.*)',i) != None and no_comment == 0 :
+                    match = re.search(r'^\s*(\/\/.*)',i)
+                    signal['comment'+str(comment_idx)] = match.group(1)
+                    comment_idx += 1
+                else :
+                    match_str = r'\s+(\w*\s*)?(\[.+\])?\s+(\w+)\s*,?\s*(\/\/.*)*'
+                    if re.search(r'^\s*input{}'.format(match_str),i) != None :
+                        match = re.search(r'input{}'.format(match_str),i)
+                    elif re.search(r'^\s*output{}'.format(match_str),i) != None :
+                        match = re.search(r'output{}'.format(match_str),i)
+                    elif re.search(r'^\s*inout{}'.format(match_str),i) != None :
+                        match = re.search(r'inout{}'.format(match_str),i)
+                    else :
+                        match = None
+                    if match != None :
+                        signal = add_signal(signal,match.group(3),match.group(2),match.group(4))
+
+def write_fold(value,first,last) :
+    'return fold string'
+    if fold == 0 :
+        return ''
+    elif value == first :
+        return '/*{{{*/'
+    elif value == last :
+        return '/*}}}*/'
+    else :
+        return ''
+
+def write_tb(line,signal) :
+    'write processed codes back/to a file'
+    index = 0
+    min_width = 2
+    indent = 0
+    sig_list = list(signal.items())
+    sig_first = sig_list[0]
+    sig_last  = sig_list[-1]
+    if 'comment' in sig_first[0] :
+        sig_first = sig_first[1]
+    else : 
+        sig_first = sig_first[0]
+    if 'comment' in sig_last[0] :
+        sig_last = sig_last[1]
+    else :
+        sig_last = sig_last[0]
+    for key,args in signal.items() :
+        if isinstance(args,list) :
+            if args[0] > 100 :
+                if args[0] < 1001 :
+                    if min_width < 3 :
+                        min_width = 3
+                else :
+                    if min_width < 4 :
+                        min_width = 4
+    logic_w = r'logic    [{:>' + '{:0d}'.format(min_width) + 'd}-1:0]{}{:<50s}'
+    with open(des_file,mode='w') as file :
+        for i in line :
+            if re.search('\s*module\s+testbench',i) != None :
+                indent = i.find(i.lstrip())
+            if r'/*autologic*/' in i and index == 0 :
+                file.write(i+'\n')
+                for key,value in signal.items() :
+                    if isinstance(value,list) :
+                        fold_str = write_fold(key,sig_first,sig_last)
+                        file.write(' '*(indent+4) + logic_w.format(value[0],' '*24,key) + ';' + value[1] + fold_str + '\n')
+                    else :
+                        fold_str = write_fold(value,sig_first,sig_last)
+                        file.write(' '*(indent+4) + value + fold_str + '\n')
+                index = 1
+            else :
+                file.write(i+'\n')
+
+def main() :
+    lines = read_tb()
+    lines = rm_logic(lines)
+    signals = get_signals(lines)
+    write_tb(lines,signals)
+
+if __name__ == '__main__' :
+    main()
+    print('Finish!')
+        
