@@ -1,0 +1,69 @@
+#!/bin/python3
+
+import yaml
+import sys
+import os
+    
+reg = {}
+regs = []
+cmd = sys.argv[1:]
+print_flg = 0
+
+def yml2dict() :
+    "return example: {'ver_day': ['r', 'rty'], 'ver': ['v'], 'test': ['r'], 'l_real': ['abstime'], 'h_real': ['abstime']}"
+    reg = {}
+    with open(yml_name, mode='r') as file:
+        cfg = file.read()
+        d = yaml.load(cfg,yaml.BaseLoader)
+    for key,args in d.items():
+        if isinstance(args,list):
+            for key,args1 in args[0].items():
+                if key == 'registers':
+                    for regs in args1:
+                        for key,fields in regs.items():
+                            if key == 'name':
+                                key_tmp = fields
+                                reg[key_tmp] = []
+                            if key == 'fields':
+                                for i in fields:
+                                    for key,field in i.items():
+                                        if key == 'name':
+                                            reg[key_tmp].append(field)
+    return reg
+
+def dict2list() :
+    "return example: ['ver_day.r', 'ver_day.rty', 'ver.v', 'test.r', 'l_real.abstime', 'h_real.abstime']"
+    regs = []
+    for key,value in reg.items() :
+        for i in value :
+            regs.append(key+'.'+i)
+    return regs
+
+if __name__ == '__main__' :
+    if '-h' in cmd or '--help' in cmd :
+        print('''\r** to convert registers into a dictionary/list
+            \r** Usage: 
+            \r     yml2reg [-y] ***.yml
+            \r** Options:
+            \r     -p,    print all regs on screen in form as reg.field
+        ''')
+        quit()
+    if cmd != [] :
+        if '-y' in cmd :
+            ind = cmd.index('-y')
+            yml_name = cmd[ind+1]
+        else :
+            yml_name = cmd[0]
+    else :
+            yml_name = 'BB_CTRL_V1.yml'
+    if '-p' in cmd :
+        print_flg = 1
+
+    if os.path.isfile(yml_name) :
+        reg = yml2dict()
+        regs = dict2list()
+
+    if print_flg == 1 :
+        for i in regs :
+            print(i)
+
