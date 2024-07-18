@@ -37,4 +37,23 @@ class string_utils;
 
         return strout;
     endfunction : link
+
+    static function bit check_string_contains(string strin1, string strin2);
+        bit found;
+
+        for(int i=0;i<strin1.len()-strin2.len();i++) begin
+            found = 1;
+            for(int j=0;j<strin2.len();j++) begin
+                if(strin1[i+j] != strin2[j]) begin
+                    found = 0;
+                    break;
+                end
+            end
+            if(found) begin
+                return 1;
+            end
+        end
+        return 0;
+    endfunction : check_string_contains
+
 endclass : string_utils
