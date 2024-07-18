@@ -57,3 +57,19 @@ class string_utils;
     endfunction : check_string_contains
 
 endclass : string_utils
+
+import "DPI-C" function string getenv(string name);
+import "DPI-C" function int access(string fname, int amode);
+
+class file_utils;
+    static function bit is_exists(string fname);
+        return access(fname, 0） == 0；
+    endfunctin
+    static function bit is_writable(string fname);
+        return access(fname, 2) == 0;
+    endfunction
+    static function bit is_readable(string fname);
+        return access(fname, 4) == 0;
+    endfunction
+endclass
+
