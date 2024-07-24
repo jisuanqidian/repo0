@@ -1,0 +1,8 @@
+# mrege the coverage after runing the regression
+find sims/ -name "*.vdb" | xargs bsub -I urg -full64 -dbname merged.vdb -format both -dir
+
+# open verdi to review the coverage
+bsub -I verdi -cov -covdir merged.vdb &
+
+# open browser to review the coverage 
+firefox urgReport/dashboard.html &
