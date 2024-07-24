@@ -72,4 +72,30 @@ class file_utils;
         return access(fname, 4) == 0;
     endfunction
 endclass
+virtual task drive()
+  int count = 0;
+  real prev_skew = 0.0;
+  real curr_skew = 0.0;
+  #(cfg.init_delay * lps);
+  vif.clock <= cfg.init_value;
+  forever begin
+    real interval = clk_period / 100.0 * (vif.clock == 1'b0 ? cfg.duty_ratio : (100 - cfg.duty_ratio));
+    real jitter = cfg.jitter_max / 100.0 * get_rand_ratio();
+    real wander = cfg.wander_max * $sin(count % 180.0 * 3.1415926);
+    curr_skew = wander + jitter;
+    #((interval + curr_skew - prev_skew) * lps);
+    vif.clock <= ~vif.clock;
+    prev_skew = curr_skew;
+    count = (count + cfg.wander_step) % 360;
+  end
+endtask: drive
+
+virtual task drive_stdclk();
+  #(cfg.init_delay * lps);
+  vif.stdclk <= cfg.init_value;
+  forever begin
+    #(clk_period / 2.0 * lps);
+    vif.stdclk <= ~vif.stdclk;
+  end
+endtask: drive_stdclk
 
