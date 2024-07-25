@@ -1,0 +1,26 @@
+class slv_apb_cfg extends svt_apb_system_configuration;
+    `uvm_object_utils(slv_apb_cfg)
+    
+    function new(string name="slv_apb_cfg");
+        super.new(name);
+        create_sub_cfgs(1);
+        
+        is_active = 0;
+        report_enable = 0;
+        trace_enable = 0;
+        uvm_reg_enable = 0;
+        apb3_enable = 1;
+        apb4_enable = 0;
+        data_idle_value = svt_apb_configuration::INACTIVE_X_VAL;
+        paddr_width = svt_apb_system_configuration::PADDR_WIDTH_32;
+        pdata_width = svt_apb_system_configuration::PDATA_WIDTH_32;
+        
+        slave_cfg[0].is_active = 1;
+        slave_cfg[0].report_enable = 0;
+        slave_cfg[0].trace_enable = 0;
+        slave_cfg[0].data_idle_value = svt_apb_configuration::INACTIVE_X_VAL;
+        slave_cfg[0].mem_enable = 1'b1;
+    endfunction
+    
+endclass
+
