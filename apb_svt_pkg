@@ -1,10 +1,11 @@
 class slv_apb_cfg extends svt_apb_system_configuration;
     `uvm_object_utils(slv_apb_cfg)
-    
+
     function new(string name="slv_apb_cfg");
         super.new(name);
+
         create_sub_cfgs(1);
-        
+
         is_active = 0;
         report_enable = 0;
         trace_enable = 0;
@@ -14,13 +15,276 @@ class slv_apb_cfg extends svt_apb_system_configuration;
         data_idle_value = svt_apb_configuration::INACTIVE_X_VAL;
         paddr_width = svt_apb_system_configuration::PADDR_WIDTH_32;
         pdata_width = svt_apb_system_configuration::PDATA_WIDTH_32;
-        
-        slave_cfg[0].is_active = 1;
+
+        slave_cfg[0].is_active = 1; 
         slave_cfg[0].report_enable = 0;
         slave_cfg[0].trace_enable = 0;
         slave_cfg[0].data_idle_value = svt_apb_configuration::INACTIVE_X_VAL;
         slave_cfg[0].mem_enable = 1'b1;
-    endfunction
-    
-endclass
+    endfunction: new
+endclass: slv_apb_cfg
 
+class slv_apb_env extends uvm_env;
+    `uvm_component_utils(slv_apb_env)
+
+    slv_apb_cfg cfg;
+
+    svt_apb_slave_agent apb_uvc;
+    svt_apb_slave_sequencer apb_sqr;
+    svt_apb_memory apb_mem;
+
+    function new(string name="slv_apb_env", uvm_component parent=null);
+        super.new(name, parent);
+
+        if (!uvm_config_db#(slv_apb_cfg)::get(this, "", "cfg", cfg)) begin
+            `uvm_fatal(get_full_name(), "cfg not created or configured")
+        end
+    endfunction
+
+    function void build_phase(uvm_phase phase);
+        super.build_phase(phase);
+
+        uvm_config_db#(uvm_object_wrapper)::set(
+            this,
+            "apb_uvc.sequencer.run_phase",
+            "default_sequence",
+            svt_apb_slave_memory_sequence::type_id::get()
+        );
+
+        // uvm_config_db#(uvm_object_wrapper)::set(
+        //     this,
+        //     "apb_uvc.sequencer.run_phase",
+        //     "default_sequence",
+        //     svt_apb_slave_random_response_sequence::type_id::get()
+        // );
+
+        uvm_config_db#(svt_apb_slave_configuration)::set(this, "apb_uvc", "cfg", cfg.slave_cfg[0]);
+        apb_uvc = svt_apb_slave_agent::type_id::create("apb_uvc", this);
+    endfunction: build_phase
+
+    function void connect_phase(uvm_phase phase);
+        super.connect_phase(phase);
+
+        apb_sqr = apb_uvc.sequencer;
+        apb_mem = apb_uvc.apb_slave_mem;
+    endfunction: connect_phase
+
+    function void start_of_simulation_phase(uvm_phase phase);
+        super.start_of_simulation_phase(phase);
+
+        `uvm_info(get_full_name(), $sformatf("\n*************** APB SLV UVC CFG ***************\n%0s", this.cfg.sprint()), UVM_LOW)
+    endfunction: start_of_simulation_phase
+endclass: slv_apb_env
+
+package slv_apb_pkg;
+import uvm_pkg::*;
+import svt_uvm_pkg::*;
+import svt_apb_uvm_pkg::*;
+
+`include "slv_apb_cfg.sv"
+`include "slv_apb_env.sv"
+`include "slv_apb_seq.sv"
+endpackage: slv_apb_pkg
+
+class cmn_slv_apb_rand_resp_seq extends svt_apb_slave_base_sequence;
+    `uvm_object_utils(cmn_slv_apb_rand_resp_seq)
+
+    function new(string name="cmn_slv_apb_rand_resp_seq");
+        super.new(name);
+    endfunction
+
+    virtual task body();
+        forever begin
+            p_sequencer.response_request_port.peek(req);
+
+            if (req.cfg == null) begin
+                req.cfg = cfg;
+            end
+
+`ifdef UVM_VERSION_1_2
+            `uvm_rand_send_with(req, {
+                pslverr_enable == 1'b0; 
+            })
+`else 
+            `uvm_rand_send(req, , {
+                pslverr_enable == 1'b0;
+            })
+`endif
+        end
+    endtask: body
+endclass: cmn_slv_apb_rand_resp_seq
+
+class mst_apb_cfg extends svt_apb_system_configuration;
+    `uvm_object_utils(mst_apb_cfg)
+
+    function new(string name="mst_apb_cfg");
+        super.new(name);
+
+        create_sub_cfgs(1);
+
+        is_active = 1;
+        report_enable = 0;
+        trace_enable = 0;
+        uvm_reg_enable = 0;
+        apb3_enable = 1;
+        apb4_enable = 0;
+        data_idle_value = svt_apb_configuration::INACTIVE_X_VAL;
+        paddr_width = svt_apb_system_configuration::PADDR_WIDTH_32;
+        pdata_width = svt_apb_system_configuration::PDATA_WIDTH_32;
+
+        slave_cfg[0].is_active = 0;
+        slave_cfg[0].report_enable = 0;
+        slave_cfg[0].trace_enable = 0;
+        slave_cfg[0].data_idle_value = svt_apb_configuration::INACTIVE_X_VAL;
+        slave_cfg[0].mem_enable = 1'b0;
+    endfunction: new
+endclass: mst_apb_cfg
+
+class mst_apb_env extends uvm_env;
+    `uvm_component_utils(mst_apb_env)
+
+    mst_apb_cfg cfg;
+
+    svt_apb_master_agent apb_uvc;
+    svt_apb_master_sequencer apb_sqr;
+
+    uvm_reg_block ral;
+
+    function new(string name="mst_apb_env", uvm_component parent=null);
+        super.new(name, parent);
+
+        if (!uvm_config_db#(mst_apb_cfg)::get(this, "", "cfg", cfg)) begin
+            `uvm_fatal(get_full_name(), "cfg not created or configured")
+        end
+
+        if (cfg.uvm_reg_enable && !uvm_config_db#(uvm_reg_block)::get(this, "", "ral", ral)) begin
+            `uvm_fatal(get_full_name(), "ral not created or configured")
+        end
+    endfunction
+
+    function void build_phase(uvm_phase phase);
+        super.build_phase(phase);
+
+        if (cfg != null) uvm_config_db#(svt_apb_system_configuration)::set(this, "apb_uvc", "cfg", cfg);
+        if (ral != null) uvm_config_db#(uvm_reg_block)::set(this, "apb_uvc", "apb_regmodel", ral);
+
+        apb_uvc = svt_apb_master_agent::type_id::create("apb_uvc", this);
+    endfunction: build_phase
+
+    function void connect_phase(uvm_phase phase);
+        super.connect_phase(phase);
+
+        apb_sqr = apb_uvc.sequencer;
+    endfunction: connect_phase
+
+    function void start_of_simulation_phase(uvm_phase phase);
+        super.start_of_simulation_phase(phase);
+
+        `uvm_info(get_full_name(), $sformatf("\n*************** AHB MST UVC CFG ***************\n%0s", this.cfg.sprint()), UVM_LOW)
+    endfunction: start_of_simulation_phase
+endclass: mst_apb_env
+
+package mst_apb_pkg;
+import uvm_pkg::*;
+import svt_uvm_pkg::*;
+import svt_apb_uvm_pkg::*;
+
+`include "mst_apb_cfg.sv"
+`include "mst_apb_env.sv"
+`include "mst_apb_seq.sv"
+endpackage: mst_apb_pkg
+
+// refer to the following file to get more examples:
+// $DESIGNWARE_HOME/vip/svt/amba_svt/latest/apb_master_agent_svt/sverilog/src/vcs/svt_apb_master_sequence_collection.svp
+
+class cmn_mst_apb_wr_seq extends svt_apb_master_base_sequence;
+    `uvm_object_utils(cmn_mst_apb_wr_seq)
+
+    rand bit[31:0] addr;
+    rand bit[31:0] data;
+
+    function new(string name="cmn_mst_apb_wr_seq");
+        super.new(name);
+    endfunction
+
+    virtual task pre_body();
+        svt_configuration get_cfg;
+
+        super.pre_body();
+
+        p_sequencer.get_cfg(get_cfg);
+
+        if (!$cast(cfg, get_cfg)) begin
+            `uvm_fatal("body", "Unable to $cast the configuration to a svt_ahb_port_configuration class");
+        end
+    endtask: pre_body
+
+    virtual task body();
+        super.body();
+
+        `uvm_create(req)
+        req.cfg = cfg;
+
+`ifdef UVM_VERSION_1_2
+        `uvm_rand_send_with(req, {
+            req.xact_type == svt_apb_transaction::WRITE;
+            req.address == local::addr;
+            req.data == local::data;
+        })
+`else
+        `uvm_rand_send(req, -1, {
+            req.xact_type == svt_apb_transaction::WRITE;
+            req.address == local::addr;
+            req.data == local::data;
+        })
+`endif
+
+        get_response(rsp);
+    endtask: body
+endclass: cmn_mst_apb_wr_seq
+
+class cmn_mst_apb_rd_seq extends svt_apb_master_base_sequence;
+    `uvm_object_utils(cmn_mst_apb_rd_seq)
+
+    rand bit[31:0] addr;
+    rand bit[31:0] data;
+
+    function new(string name="cmn_mst_apb_rd_seq");
+        super.new(name);
+    endfunction
+
+    virtual task pre_body();
+        svt_configuration get_cfg;
+
+        super.pre_body();
+
+        p_sequencer.get_cfg(get_cfg);
+
+        if (!$cast(cfg, get_cfg)) begin
+            `uvm_fatal("body", "Unable to $cast the configuration to a svt_ahb_port_configuration class");
+        end
+    endtask: pre_body
+
+    virtual task body();
+        super.body();
+
+        `uvm_create(req)
+        req.cfg = cfg;
+
+`ifdef UVM_VERSION_1_2
+        `uvm_rand_send_with(req, {
+            req.xact_type == svt_apb_transaction::READ;
+            req.address == local::addr;
+        })
+`else
+        `uvm_rand_send(req, -1, {
+            req.xact_type == svt_apb_transaction::READ;
+            req.address == local::addr;
+        })
+`endif
+
+        get_response(rsp);
+
+        data = rsp.data;
+    endtask: body
+endclass: cmn_mst_apb_rd_seq
