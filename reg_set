@@ -1,0 +1,379 @@
+class cmn_reg_set extends uvm_object;
+    typedef uvm_reg_field uvm_fld;
+    typedef uvm_reg_block uvm_ral;
+
+    // internal members
+    protected bit rals[uvm_ral];
+    protected bit regs[uvm_reg];
+    protected bit flds[uvm_fld];
+
+    // public methods to import register models
+    virtual function void import_ral(uvm_ral ral);
+        `uvm_info(get_name(), $sformatf("importing register model \"%s\"", ral.get_name()), UVM_LOW);
+        
+        rals[ral] = 1'b1;
+        
+        begin // import the registers
+            uvm_reg rlist[$];
+            
+            ral.get_registers(rlist);
+            
+            foreach (rlist[i]) begin
+                uvm_fld flist[$];
+                
+                rlist[i].get_fields(flist);
+                
+                foreach (flist[j]) begin
+                    flds[flist[j]] = 1'b1;
+                end
+                
+                regs[rlist[i]] = 1'b1;
+            end
+        end
+    endfunction: import_ral
+
+    static function cmn_reg_set get_inst(string name);
+        if (insts[name] == null) begin
+            `uvm_info("cmn_reg_set", $sformatf("create register container %s", name), UVM_LOW);
+            insts[name] = new(name);
+        end
+
+        return insts[name];
+    endfunction: get_inst
+
+    protected function new(string name);
+        super.new(name);
+    endfunction: new
+
+    local static cmn_reg_set insts[string];
+
+    // public methods to fetch internal register/memory
+    virtual function void get_rals(ref uvm_ral ral_list[$]);
+        foreach (rals[i]) begin
+            ral_list.push_back(i);
+        end
+    endfunction: get_rals
+
+    virtual function void get_regs(ref uvm_reg list[$]);
+        foreach (regs[r]) begin
+            list.push_back(r);
+        end
+    endfunction: get_regs
+
+    virtual function void get_flds(ref uvm_fld list[$]);
+        foreach (flds[f]) begin
+            list.push_back(f);
+        end
+    endfunction: get_flds
+
+    virtual function uvm_reg_block get_blk_by_name(string name);
+        foreach (rals[i]) begin
+            uvm_reg_block blks[$];
+            i.get_blocks(blks);
+            
+            foreach (blks[j]) begin
+                string list[$];
+                int size;
+                
+                string_utils::split(blks[j].get_full_name(), ".", list);
+                size = list.size();
+                
+                for (int k=0; k<size; k++) begin
+                    string partial = string_utils::link(list[k:$], ".");
+                    
+                    if (partial == name) begin
+                        return blks[j];
+                    end
+                end
+            end
+            
+            return null;
+        endfunction: get_blk_by_name
+
+        virtual function uvm_reg get_reg_by_name(string name);
+            foreach (regs[r]) begin
+                string list[$];
+                int size;
+                
+                string_utils::split(r.get_full_name(), ".", list);
+                size = list.size();
+                
+                for (int i=0; i<size; i++) begin
+                    string partial = string_utils::link(list[i:$], ".");
+                    
+                    if (partial == name) begin
+                        return r;
+                    end
+                end
+            end
+            return null;
+        endfunction: get_reg_by_name
+
+virtual function uvm_fld get_fld_by_name(string name);
+    foreach (flds[f]) begin
+        string list[$];
+        int size;
+        string_utils::split(f.get_full_name()，",", list);
+        size = list.size();
+        for (int i=0; i<size; i++) begin
+            string partial = string_utils::link(list[i:$], ",");
+            if (partial == name) begin
+                return f;
+            end
+        end
+    end
+    return null;
+endfunction: get_fld_by_name
+
+virtual function uvm_reg get_reg_by_addr(uvm_reg_addr_t addr);
+    foreach (regs[r]) begin
+        if (r.get_address() == addr) begin
+            return r;
+        end
+    end
+    return null;
+endfunction: get_reg_by_addr
+
+// ( public methods to apply operations like get/set/update/reset/read/write/pull
+Virtual function uvm_reg_data_t get(string name);
+    uvm_reg r = get_reg_by_name(name);
+        uvm_fld f = r == null ? get_fld_by_name(name) : null;
+
+        if (r != null) begin
+            return r.get();
+        end
+        else if (f != null) begin
+            return f.get();
+        end
+        else begin
+            `uvm_fatal(get_name(), $sformatf("can't find a reg or field by name %s", name))
+        end
+    endfunction: get
+
+    virtual function void set(string name, uvm_reg_data_t data);
+        uvm_reg r = get_reg_by_name(name);
+        uvm_fld f = r == null ? get_fld_by_name(name) : null;
+
+        if (r != null) begin
+            r.set(data);
+        end
+        else if (f != null) begin
+            f.set(data);
+        end
+        else begin
+            `uvm_fatal(get_name(), $sformatf("can't find a reg or field by name %s", name))
+        end
+    endfunction: set
+
+`ifdef UVM_VERSION_1_2
+    virtual task update(string name, uvm_path_e path = UVM_DEFAULT_PATH);
+`else
+    virtual task update(string name, uvm_door_e path = UVM_DEFAULT_DOOR);
+`endif
+        uvm_reg r = get_reg_by_name(name);
+        uvm_status_e status;
+
+        if (r == null) begin
+            `uvm_fatal(get_name(), $sformatf("can't find a register by name %s", name))
+        end
+
+        r.update(status, path);
+    endtask: update
+
+`ifdef UVM_VERSION_1_2
+    virtual task read(input string name, output uvm_reg_data_t data, input uvm_path_e path = UVM_DEFAULT_PATH);
+`else
+    virtual task read(input string name, output uvm_reg_data_t data, input uvm_door_e path = UVM_DEFAULT_DOOR);
+`endif
+        uvm_reg r = get_reg_by_name(name);
+        uvm_status_e status;
+
+        if (r == null) begin
+            `uvm_fatal(get_name(), $sformatf("can't find a register by name %s", name))
+        end
+
+        r.read(status, data, path);
+    endtask: read
+
+`ifdef UVM_VERSION_1_2
+    virtual task write(input string name, input uvm_reg_data_t data, input uvm_path_e path = UVM_DEFAULT_PATH);
+`else
+    virtual task write(input string name, input uvm_reg_data_t data, input uvm_door_e path = UVM_DEFAULT_DOOR);
+`endif
+        uvm_reg r = get_reg_by_name(name);
+        uvm_status_e status;
+
+        if (r == null) begin
+            `uvm_fatal(get_name(), $sformatf("can't find a register by name %s", name))
+        end
+
+        r.write(status, data, path);
+    endtask: write
+
+    virtual task pull(input string name, uvm_reg_data_t target, uvm_reg_data_t mask = '1);
+        uvm_reg r = get_reg_by_name(name);
+        uvm_status_e status;
+        uvm_reg_data_t data;
+
+        if (r == null) begin
+            `uvm_fatal(get_name(), $sformatf("can't find a register by name %s", name))
+        end
+
+        do r.read(status, data, UVM_FRONTDOOR);
+        while ((data & mask) != (target & mask));
+    endtask: pull
+    // } ---------------------------------------------------------------------------------------------------------------------------
+
+    //------------------------------------------------------------------------------------------------------------------------------
+    // { public methods to apply operations to interact with cmdline and config files
+    virtual function void import_cfg(string cname);
+        UVM_FILE fh = $fopen(cname, "r");
+
+        for (int i=0, string line=""; $fgets(line, fh) > 0; i++) begin
+            if (line.substr(0, 1) != "//") begin
+                int pos0 = string_utils::find(line, "=");
+                int pos1 = line.len() - 1;
+
+                if (pos0 != -1 && pos1 != -1) begin
+                    string head = string_utils::trim(line.substr(0, pos0-1));
+                    string body = string_utils::trim(line.substr(pos0+1, pos1-1));
+
+                    uvm_reg r = get_reg_by_name(head);
+                    uvm_reg_data_t data = number_utils#(uvm_reg_data_t)::atohex(body);
+
+                    if (r != null) begin
+                        uvm_fld flist[$];
+
+                        `uvm_info(get_full_name(), $sformatf("import %s=0x%h according to cfg file", r.get_full_name(), data), UVM_HIGH)
+                        restrict_reg(r, data);
+                    end
+                    else begin
+                        `uvm_warning(get_name(), $sformatf("skip to import register %s which is not found", head))
+                    end
+                end
+            end
+        end 
+
+        $fclose(fh);
+    endfunction: import_cfg
+
+    virtual function void export_cfg(string cname);
+        UVM_FILE fh = $fopen(cname, "w");
+
+        foreach (regs[r]) begin
+            uvm_reg_data_t rdata = r.get();
+            $fdisplay(fh, $sformatf("%s=0x%h", r.get_full_name(), rdata));
+
+            begin
+                uvm_fld flist[$];
+
+                r.get_fields(flist);
+
+                foreach (flist[f]) begin
+                    string name = flist[f].get_full_name();
+                    uvm_reg_data_t fdata = flist[f].get();
+                    int lsb = flist[f].get_lsb_pos();
+                    int bits = flist[f].get_n_bits();
+
+                    if (bits > 1) begin
+                        $fdisplay(fh, $sformatf("// %s[%0d:%0d]=0x%h", name, lsb+bits-1, lsb, fdata));
+                    end
+                    else begin
+                        $fdisplay(fh, $sformatf("// %s[%0d]=0x%h", name, lsb, fdata));
+                    end
+                end
+            end
+        end
+
+        $fclose(fh);
+    endfunction: export_cfg
+
+    virtual function void parse_opts();
+        string options[$];
+
+        uvm_cmdline_proc.get_plusargs(options);
+
+        foreach (options[i]) begin
+            string content;
+
+            `uvm_info(get_name(), $sformatf("handling option %s", options[i]), UVM_MEDIUM)
+
+            if ($sscanf(options[i], "+regs::%s", content)) begin
+                int pos0 = string_utils::find(content, "=");
+                int pos1 = content.len() - 1;
+
+                string index = content.substr(0, pos0-1);
+                string value = content.substr(pos0+1, pos1);
+
+                uvm_reg r = get_reg_by_name(index);
+                uvm_fld f = r == null ? get_fld_by_name(index) : null;
+
+                uvm_reg_data_t data;
+
+                if (value.substr(0, 1) == "0x" || value.substr(0, 1) == "0X") begin
+                    data = number_utils#(uvm_reg_data_t)::atohex(value);
+                end
+                else begin
+                    data = number_utils#(uvm_reg_data_t)::atodec(value);
+                end
+
+                if (r != null) begin
+                    `uvm_info(get_full_name(), $sformatf("set %s=0x%h according to cmdline opts", r.get_full_name(), data), UVM_LOW)
+                    restrict_reg(r, data);
+                end
+                else if (f != null) begin
+                    `uvm_info(get_full_name(), $sformatf("set %s=0x%h according to cmdline opts", f.get_full_name(), data), UVM_LOW)
+                    restrict_fld(f, data);
+                end
+                else begin
+                    // `uvm_fatal(get_name(), $sformatf("can't find a registeror field by option %s", options[i]))
+                end
+            end
+        end
+    endfunction: parse_opts
+    
+`ifdef UVM_VERSION_1_2
+    virtual task flush_regs(uvm_path_e path = UVM_DEFAULT_PATH);
+`else
+    virtual task flush_regs(uvm_door_e path = UVM_DEFAULT_DOOR);
+`endif
+        uvm_reg rlist[$];
+
+        get_regs(rlist);
+
+        foreach (rlist[i]) begin
+            uvm_status_e status;
+
+            rlist[i].update(status, path);
+        end
+    endtask: flush_regs
+
+    virtual task reset_regs(string kind = "HARD");
+        foreach (regs[r]) begin
+            r.reset(kind);
+        end
+    endtask: reset_regs
+    // } ---------------------------------------------------------------------------------------------------------------------------
+
+    //------------------------------------------------------------------------------------------------------------------------------
+    // { internel methods to apply operations to set desired values, rand_mode
+    protected function void restrict_reg(uvm_reg r, uvm_reg_data_t data);
+        uvm_fld flist[$];
+
+        r.get_fields(flist);
+
+        foreach (flist[i]) begin
+            flist[i].value.rand_mode(0);
+        end
+
+        r.set(data);
+    endfunction: restrict_reg
+
+    protected function void restrict_fld(uvm_fld f, uvm_reg_data_t data);
+        f.value.rand_mode(0);
+
+        f.set(data);
+    endfunction: restrict_fld
+    // } ---------------------------------------------------------------------------------------------------------------------------
+endclass: cmn_reg_set
+
