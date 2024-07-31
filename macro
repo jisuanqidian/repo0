@@ -1,0 +1,118 @@
+
+`define CREATE_PULSE_AGENT(ENUM,TIMER_MUX,UL_DL,PINGPONG) \
+    pls_array[``ENUM``] = main_ctrl_pulse_agent::type_id::create(`"``ENUM``_agt`",this); \
+    uvm_config_db#(int)::set(this,`"``ENUM``_agt.*`","timer_mux",``TIMER_MUX``); \
+    pls_array[``ENUM``].signal_e = ``ENUM``; \
+    uvm_config_db#(int)::set(this,`"``ENUM``_agt.*`","ul_dl",``UL_DL``); \
+    pls_array[``ENUM``].is_pingpong = ``PINGPONG``;
+
+`define CREATE_LEVEL_AGENT(ENUM) \
+    lvl_array[``ENUM``] = main_ctrl_level_agent::type_id::create(`"``ENUM``_agt`",this); \
+    lvl_array[``ENUM``].signal_e = ``ENUM``;
+
+`define CREATE_INT_IN_AGENT(ENUM,ID,ID_SUB) \
+    int_in_array[``ENUM``] = main_ctrl_int_in_agent::type_id::create(`"``ENUM``_agt`",this); \
+    int_in_array[``ENUM``].int_event = ``ENUM``; \
+    int_in_array[``ENUM``].id = ID; \
+    int_in_array[``ENUM``].id_sub = ID_SUB;
+
+`define CREATE_INT_OUT_AGENT(NUM) \
+    int_out_array[``NUM``] = main_ctrl_int_out_agent::type_id::create(`"int_out_``NUM``_agt`",this); \
+    int_out_array[``NUM``].id = 32'd``NUM``;
+
+`define CREATE_PULSE_SEQ(ENUM,PINGPONG) \
+    if(test_pls_e != NONE_PLS) begin \
+        if(test_pls_e == ALL_PLS || test_pls_e == ``ENUM``) begin \
+            `uvm_info("CREATE",$sformatf(`"create pulse sequence ``ENUM```"),UVM_HIGH) \
+            pls_seq_array[``ENUM``] = main_ctrl_pulse_sequence::type_id::create(`"``ENUM``_seq`"); \
+            pls_seq_array[``ENUM``].signal_seq = ``ENUM``; \
+            pls_seq_array[``ENUM``].is_pingpong = ``PINGPONG``; \
+        end \
+    end
+
+`define CREATE_LEVEL_SEQ(ENUM) \
+    if(test_lvl_e != NONE_LVL) begin \
+        if(test_lvl_e == ALL_LVL || test_lvl_e == ``ENUM``) begin \
+            lvl_seq_array[``ENUM``] = main_ctrl_level_sequence::type_id::create(`"``ENUM``_seq`"); \
+            lvl_seq_array[``ENUM``].signal_seq = ``ENUM``; \
+        end \
+    end
+
+`define CREATE_INT_IN_SEQ(ENUM,ID,ID_SUB) \
+    if(test_int_in_e != NONE_INT) begin \
+        if(test_int_in_e == ALL_INT || test_int_in_e == ``ENUM``) begin \
+            int_in_seq_array[``ENUM``] = main_ctrl_int_in_sequence::type_id::create(`"``ENUM``_seq`"); \
+            int_in_seq_array[``ENUM``].id = ID; \
+            int_in_seq_array[``ENUM``].id_sub = ID_SUB; \
+            int_in_seq_array[``ENUM``].signal_seq = ``ENUM``; \
+        end \
+    end
+
+`define MWRITE(REG,WDATA) \
+    begin \
+    uvm_status_e status ; \
+    uvm_reg_data_t read_data = 0; \
+    uvm_door_e path ; \
+    cmn_reg_set reg_set = cmn_reg_set::get_inst("bb_ctrl_reg_set"); \
+    reg_set.write("``REG``",``WDATA``); \
+    //reg_bb_ctrl.MCTRL_V4.BLK_MCTRL_V4.``REG``.write(status,``WDATA``,path); \
+    end \
+
+`define SET(REG,FIELD,WDATA) \
+    begin \
+    uvm_status_e status ; \
+    uvm_reg_data_t read_data = 0; \
+    uvm_door_e path ; \
+    cmn_reg_set reg_set = cmn_reg_set::get_inst("bb_ctrl_reg_set"); \
+    #10ns; \
+    reg_set.read(`"``REG```",read_data); \
+    reg_set.set(`"``REG``.``FIELD```",``WDATA``); \
+    #10ns; \
+    //`uvm_info(meas_reg.BLK_PHY_MEAS_V1.``REG``.``FIELD``.get_name(), $sformatf(`"Writing register field ``REG``.``FIELD`` with data: %h`",``WDATA``), UVM_LOW) \
+    reg_set.update(`"``REG```"); \
+    //reg_bb_ctrl.MCTRL_V4.BLK_MCTRL_V4.``REG``.read(status,read_data,path); \
+    //read_data[(reg_bb_ctrl.MCTRL_V4.BLK_MCTRL_V4.``REG``.``FIELD``.get_lsb_pos()+reg_bb_ctrl.MCTRL_V4.BLK_MCTRL_V4.``REG``.``FIELD``.get_n_bits()):reg_bb_ctrl.MCTRL_V4.BLK_MCTRL_V4.``REG``.``FIELD``.get_lsb_pos()] = ``WDATA``; \
+    //reg_bb_ctrl.MCTRL_V4.BLK_MCTRL_V4.``REG``.write(status,read_data,path); \
+    //reg_bb_ctrl.MCTRL_V4.BLK_MCTRL_V4.``REG``.``FIELD``.set(``WDATA``); \
+    //reg_bb_ctrl.MCTRL_V4.BLK_MCTRL_V4.``REG``.update(status,path); \
+    end \
+
+`define SETS_ST(REG) \
+    begin \
+    uvm_status_e status ; \
+    uvm_reg_data_t read_data = 0; \
+    uvm_door_e path ; \
+    cmn_reg_set reg_set = cmn_reg_set::get_inst("bb_ctrl_reg_set"); \
+    reg_set.read(`"``REG```",read_data); \
+    //reg_bb_ctrl.MCTRL_V4.BLK_MCTRL_V4.``REG``.read(status,read_data,path); \
+    //reg_bb_ctrl.MCTRL_V4.BLK_MCTRL_V4.``REG``.write(status,32'h0,path); \
+    end \
+
+`define SETS(REG,FIELD,WDATA) \
+    begin \
+    uvm_status_e status ; \
+    uvm_door_e path ; \
+    cmn_reg_set reg_set = cmn_reg_set::get_inst("bb_ctrl_reg_set"); \
+    reg_set.set(`"``REG``.``FIELD```",``WDATA``); \
+    //reg_bb_ctrl.MCTRL_V4.BLK_MCTRL_V4.``REG``.``FIELD``.set(``WDATA``); \
+    end \
+
+`define SETS_END(REG) \
+    begin \
+    uvm_status_e status ; \
+    uvm_door_e path ; \
+    cmn_reg_set reg_set = cmn_reg_set::get_inst("bb_ctrl_reg_set"); \
+    reg_set.update(`"``REG```"); \
+    //reg_bb_ctrl.MCTRL_V4.BLK_MCTRL_V4.``REG``.update(status,path); \
+    end \
+
+`define GET(REG,RDATA) \
+    begin \
+    uvm_status_e status ; \
+    uvm_reg_data_t read_data; \
+    uvm_door_e path ; \
+    cmn_reg_set reg_set = cmn_reg_set::get_inst("bb_ctrl_reg_set"); \
+    reg_set.read(`"``REG```",``RDATA``); \
+    //reg_bb_ctrl.MCTRL_V4.BLK_MCTRL_V4.``REG``.read(status,``RDATA``,path); \
+    //reg_bb_ctrl.MCTRL_V4.BLK_MCTRL_V4.``REG`.`FIELD``.get(``WDATA``); \
+    end \
